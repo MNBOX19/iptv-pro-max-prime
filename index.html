@@ -241,7 +241,7 @@
     </div>
 
     <script>
-        /* === MOTOR EMPRESARIAL 24/7 MAX - ANTI-TELA PRETA (FREEZE FRAME) === */
+        /* === MOTOR EMPRESARIAL 24/7 MAX - ANTI-TELA PRETA E OTIMIZADO PARA MEDIATEK/PHILCO === */
         
         function safePlay(vidElement) {
             if (!vidElement) return;
@@ -285,7 +285,8 @@
                         c.width = v.videoWidth; c.height = v.videoHeight;
                         var ctx = c.getContext('2d');
                         ctx.drawImage(v, 0, 0, c.width, c.height);
-                        c.style.display = 'block';
+                        /* Proteção extra para Philco/MediaTek: Evita mostrar canvas se ele gerar tela preta nativa */
+                        if(c.width > 0) { c.style.display = 'block'; }
                     } catch(e) { console.log("Erro ao salvar frame:", e); }
                 }
             },
@@ -306,12 +307,14 @@
                     if (App.currentMode === 'series' && App.fullData && App.fullData[App.idx] && App.fullData[App.idx].is_episode) {
                         var nextIdx = App.idx + 1;
                         if (nextIdx < App.fullData.length) { 
-                            PlayerEngine.hardStop(false, true); 
-                            App.itemClick(nextIdx); 
+                            // Transição suave em série sem resetar player
+                            setTimeout(function() {
+                                App.itemClick(nextIdx);
+                            }, 50); 
                             return; 
                         }
                     }
-                    if(App.currentMode !== 'live') PlayerEngine.hardStop();
+                    if(App.currentMode !== 'live') PlayerEngine.hardStop(false, false);
                     else PlayerEngine.handleError(false); 
                 };
                 
@@ -336,16 +339,35 @@
             play: function(url) {
                 if(this.url === url && this.video && !this.video.paused) return;
                 var isRetry = (this.url === url);
-                if(!isRetry) { this.clearFreeze(); this.resetDOM(); } else { this.hardStop(true); }
+                
+                if(!isRetry) { 
+                    this.clearFreeze(); 
+                    if (App.currentMode === 'live') {
+                        this.resetDOM(); 
+                    } else {
+                        if (this.video) {
+                            this.video.pause();
+                            this.video.removeAttribute('src');
+                            /* Flush de memória vital para o processador MT7603U da Philco: */
+                            try { this.video.currentTime = 0; } catch(e){} 
+                            try { this.video.load(); } catch(e){}
+                        }
+                    }
+                } else { 
+                    this.hardStop(true); 
+                }
                 
                 this.url = url; this.stallCount = 0; this.retryCount = 0;
                 this.showBuffer('CONECTANDO SINAL...'); document.getElementById('pause-layer').style.display = 'none';
-                this.startMonitor(); if(!this.video) return; this.video.src = url; safePlay(this.video);
+                this.startMonitor(); 
+                if(!this.video) return; 
+                this.video.src = url; 
+                safePlay(this.video);
             },
 
             onPlaySuccess: function() {
                 this.stallCount = 0; this.retryCount = 0;
-                this.clearFreeze(); // Assim que rodar liso, remove o snapshot falso
+                this.clearFreeze(); 
                 this.hideBuffer();
             },
 
@@ -379,7 +401,6 @@
                     this.retryCount++;
                     this.showBuffer('RECONECTANDO (' + this.retryCount + ')...');
 
-                    // Congela a tela milissegundos ANTES de resetar o player para evitar a tela preta
                     if(this.retryCount > 2 || isStall) {
                         this.freezeFrame(); 
                         this.resetDOM(); 
