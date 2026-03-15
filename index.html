@@ -345,12 +345,10 @@
                     if (App.currentMode === 'live') {
                         this.resetDOM(); 
                     } else {
+                        // SOLUÇÃO PARA TELA PRETA: Em vez de destruir a fonte do vídeo (o que quebra a Philco),
+                        // nós apenas pausamos para manter a tag preparada e limpa para receber a nova URL.
                         if (this.video) {
                             this.video.pause();
-                            this.video.removeAttribute('src');
-                            /* Flush de memória vital para o processador MT7603U da Philco: */
-                            try { this.video.currentTime = 0; } catch(e){} 
-                            try { this.video.load(); } catch(e){}
                         }
                     }
                 } else { 
@@ -360,8 +358,15 @@
                 this.url = url; this.stallCount = 0; this.retryCount = 0;
                 this.showBuffer('CONECTANDO SINAL...'); document.getElementById('pause-layer').style.display = 'none';
                 this.startMonitor(); 
+                
                 if(!this.video) return; 
+
+                // Injeta a URL e avisa a placa da Philco para recalcular o vídeo VOD corretamente
                 this.video.src = url; 
+                if (App.currentMode !== 'live' && !isRetry) {
+                    try { this.video.load(); } catch(e) {}
+                }
+
                 safePlay(this.video);
             },
 
